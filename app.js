@@ -1,5 +1,5 @@
 import React, {Component} from "react";
-import {View, Text, StyleSheet, Platform, ListView, Keyboard} from "react-native";
+import {View, Text, StyleSheet, ActivityIndicator, Platform, ListView, Keyboard, AsyncStorage} from "react-native";
 import Header from "./header";
 import Footer from "./footer";
 import Row from "./row";
@@ -21,12 +21,15 @@ class App extends Component {
 		// a renderable component.
 		const ds = new ListView.DataSource({rowHasChanged: (r1, r2) => r1 !== r2});
 		this.state = {
+			loading: true,
 			allComplete: false,
 			filter: "ALL",
 			value: "",
 			items: [],
 			dataSource: ds.cloneWithRows([])
 		}
+		this.handleUpdateText = this.handleUpdateText.bind(this);
+		this.handleToggleEditing = this.handleToggleEditing.bind(this);
 		this.handleClearComplete = this.handleClearComplete.bind(this);
 		this.handleFilter = this.handleFilter.bind(this);
 		this.handleRemoveItem = this.handleRemoveItem.bind(this);
@@ -35,12 +38,46 @@ class App extends Component {
 		this.handleAddItem = this.handleAddItem.bind(this);
 		this.handleToggleAllComplete = this.handleToggleAllComplete.bind(this);
 	}
+
+	componentWillMount() {
+		AsyncStorage.getItem("items").then((json) => {
+			try {
+				const items = JSON.parse(json);
+				this.setSource(items, items, {loading: false});
+			} catch(e) {
+				this.setState({
+					loading: false
+				})
+			}
+		})
+	}
+	handleUpdateText(key, text) {
+		const newItems = this.state.items.map((item) => {
+			if (item.key !== key) return item;
+			return {
+				...item,
+				text
+			}
+		})
+		this.setSource(newItems, filterItems(this.state.filter, newItems));
+	}
+	handleToggleEditing(key, editing) {
+		const newItems = this.state.items.map((item) => {
+			if (item.key !== key) return item;
+			return {
+				...item,
+				editing
+			}
+		})
+		this.setSource(newItems, filterItems(this.state.filter, newItems));
+	}
 	setSource(items, itemsDatasource, otherState = {}) {
 		this.setState({
 			items,
 			dataSource: this.state.dataSource.cloneWithRows(itemsDatasource),
 			...otherState
 		})
+		AsyncStorage.setItem("items", JSON.stringify(items));
 	}
 	handleClearComplete() {
 		const newItems = filterItems("ACTIVE", this.state.items);
@@ -104,6 +141,8 @@ class App extends Component {
 								return (
 									<Row
 										key={key}
+										onUpdate={(text) => this.handleUpdateText(key, text)}
+										onToggleEdit={(editing) => this.handleToggleEditing(key, editing)}
 										onRemove={() => this.handleRemoveItem(key)}
 										onComplete={(complete) => this.handleToggleComplete(key, complete)}
 										{...value}
@@ -121,6 +160,12 @@ class App extends Component {
 					filter={this.state.filter}
 					onClearComplete={this.handleClearComplete}
 				/>
+				{this.state.loading && <View style={styles.loading}>
+					<ActivityIndicator
+						animating
+						size="large"
+					/>
+				</View> }
 			</View>
 		);
 	}
@@ -133,6 +178,16 @@ const styles = StyleSheet.create({
 		...Platform.select({
 			ios: {paddingTop: 30}
 		})
+	},
+	loading: {
+		position: "absolute",
+		left: 0,
+		top: 0,
+		right: 0,
+		bottom: 0,
+		alignItems: "center",
+		justifyContent: "center",
+		backgroundColor: "rgba(0,0,0,0.2)"
 	},
 	content: {
 		flex: 1,
